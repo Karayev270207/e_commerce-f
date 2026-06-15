@@ -1,45 +1,85 @@
-// ─── Modern E-Commerce Theme ───
-// Central design tokens for the entire app
+import { Appearance, useColorScheme } from 'react-native';
 
-export const Colors = {
-    // Primary palette — rich emerald
-    primary: '#059669',
-    primaryDark: '#047857',
-    primaryLight: '#34D399',
-    primarySurface: '#ECFDF5',
+// ─── Light Mode — warm beige, golden yellow, steel blue ───────────────────────
+const light = {
+    primary: '#f2c94c',
+    primaryDark: '#c9a318',
+    primaryLight: '#f7df8a',
+    primarySurface: '#fef9e7',
 
-    // Accent — warm amber for CTAs & highlights
-    accent: '#F59E0B',
-    accentDark: '#D97706',
+    accent: '#5b9eb3',
+    accentDark: '#4a87a0',
+    accentSurface: '#e4f2f7',
 
-    // Neutrals
-    background: '#F8FAFC',
-    surface: '#FFFFFF',
-    surfaceAlt: '#F1F5F9',
-    border: '#E2E8F0',
-    borderLight: '#F1F5F9',
+    background: '#eae4d6',
+    surface: '#f5f0e8',
+    surfaceAlt: '#ddd7c9',
+    border: '#c8c0b0',
+    borderLight: '#d8d2c4',
 
-    // Text
-    text: '#0F172A',
-    textSecondary: '#64748B',
-    textMuted: '#94A3B8',
-    textOnPrimary: '#FFFFFF',
+    text: '#2c2010',
+    textSecondary: '#6b5c40',
+    textMuted: '#a8997e',
+    textOnPrimary: '#1c1400',
 
-    // Semantic
-    error: '#EF4444',
-    errorLight: '#FEF2F2',
-    success: '#10B981',
-    successLight: '#F0FDF4',
-    warning: '#F59E0B',
-    warningLight: '#FFFBEB',
+    error: '#dc2626',
+    errorLight: '#fef2f2',
+    success: '#059669',
+    successLight: '#ecfdf5',
+    warning: '#d97706',
+    warningLight: '#fffbeb',
 
-    // Cart badge
-    badge: '#EF4444',
-
-    // Overlay
+    badge: '#ef4444',
     overlay: 'rgba(0,0,0,0.4)',
-    shimmer: '#E2E8F0',
-};
+    shimmer: '#ddd7c9',
+} as const;
+
+// ─── Dark Mode — deep navy/purple, golden yellow, warm cream ──────────────────
+const dark = {
+    primary: '#f2c94c',
+    primaryDark: '#c9a318',
+    primaryLight: '#f7df8a',
+    primarySurface: 'rgba(242, 201, 76, 0.15)',
+
+    accent: '#9b7fa7',
+    accentDark: '#7d6289',
+    accentSurface: 'rgba(155, 127, 167, 0.15)',
+
+    background: '#37335a',
+    surface: '#46416c',
+    surfaceAlt: '#2e2b4e',
+    border: '#5a556e',
+    borderLight: '#46416c',
+
+    text: '#e5d3c1',
+    textSecondary: '#b8a49a',
+    textMuted: '#8a7a72',
+    textOnPrimary: '#1c1400',
+
+    error: '#f87171',
+    errorLight: 'rgba(239, 68, 68, 0.15)',
+    success: '#34d399',
+    successLight: 'rgba(16, 185, 129, 0.15)',
+    warning: '#fbbf24',
+    warningLight: 'rgba(245, 158, 11, 0.15)',
+
+    badge: '#f87171',
+    overlay: 'rgba(0,0,0,0.6)',
+    shimmer: '#2e2b4e',
+} as const;
+
+export const LightColors = light;
+export const DarkColors = dark;
+
+// Static snapshot — kept for any code that runs outside React components.
+export const Colors = Appearance.getColorScheme() === 'dark' ? dark : light;
+
+// Reactive hook — use this in components so styles re-render on system theme change.
+export type ThemeColors = typeof light;
+export function useThemeColors(): ThemeColors {
+    const scheme = useColorScheme();
+    return scheme === 'dark' ? dark : light;
+}
 
 export const Spacing = {
     xs: 4,

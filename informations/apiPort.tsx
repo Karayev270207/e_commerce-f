@@ -1,9 +1,11 @@
 import api from "./apiAxios";
 import {
+  CartItem,
   PostProduct,
   Product,
   TypeBrand,
   TypeCategory,
+  TypeCommerceArea,
   TypeCustomer,
 } from "./types";
 
@@ -144,7 +146,13 @@ export const getProducts = async (): Promise<Product[]> => {
     console.log("🔄 [Products] Fetching all products...");
     const res = await api.get("/products");
     console.log("✅ [Products] Fetched successfully:", res.data);
-    return res.data?.products || res.data;
+    const raw: any[] = res.data?.products || res.data;
+    return raw.map((p) => ({
+      ...p,
+      name: p.name ?? "",
+      category: p.category ?? "",
+      image: p.image ?? p.main_image_url ?? null,
+    }));
   } catch (error) {
     console.error("❌ [Products] Failed to fetch products:", error);
     throw error;
@@ -163,15 +171,59 @@ export const getProductById = async (id: number): Promise<Product> => {
   }
 };
 
+// ─── Image upload helper (reused by product and commerce area functions) ───
+
+function buildImageFormData(
+  imageUri: string,
+  fields: Record<string, string>
+): FormData {
+  const filename = imageUri.split("/").pop() ?? "image.jpg";
+  const ext = (/\.(\w+)$/.exec(filename)?.[1] ?? "jpg").toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp", heic: "image/heic",
+  };
+  const formData = new FormData();
+  formData.append("image", { uri: imageUri, name: filename, type: mimeTypes[ext] ?? "image/jpeg" } as any);
+  Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+  return formData;
+}
+
 export const addProduct = async (product: PostProduct) => {
   try {
-    console.log("🔄 [Add Product] Creating new product...", product);
-    const res = await api.post("/products", product);
-    console.log("✅ [Add Product] Product created successfully:", res.data);
+    let res;
+
+    if (product.imageUri) {
+      const formData = buildImageFormData(product.imageUri, {
+        name:  product.name,
+        price: String(product.price),
+        stock: String(product.stock ?? 0),
+        description: product.description ?? "",
+        ...(product.category_id      != null ? { category_id:      String(product.category_id) }      : {}),
+        ...(product.brand_id         != null ? { brand_id:         String(product.brand_id) }         : {}),
+        ...(product.commerce_area_id != null ? { commerce_area_id: String(product.commerce_area_id) } : {}),
+      });
+      console.log("🔄 [Add Product] Creating product with image...");
+      res = await api.post("/products", formData);
+    } else {
+      console.log("🔄 [Add Product] Creating product...");
+      res = await api.post("/products", {
+        name:            product.name,
+        price:           product.price,
+        stock:           product.stock ?? 0,
+        description:     product.description ?? "",
+        category_id:     product.category_id     ?? null,
+        brand_id:        product.brand_id         ?? null,
+        commerce_area_id: product.commerce_area_id ?? null,
+      });
+    }
+
+    console.log("✅ [Add Product] Product created:", res.data);
     return res.data;
-  } catch (error) {
-    console.error("❌ [Add Product] Failed to create product:", error);
-    throw error;
+  } catch (error: any) {
+    const msg = error?.response?.data?.message ?? error?.message ?? "Failed to create product";
+    console.error("❌ [Add Product] Failed:", msg);
+    throw new Error(msg);
   }
 };
 
@@ -180,12 +232,25 @@ export const updateProduct = async (
   product: Partial<PostProduct>,
 ) => {
   try {
-    console.log(`🔄 [Update Product] Updating product ${id}...`, product);
-    const res = await api.put(`/products/${id}`, product);
-    console.log(
-      `✅ [Update Product] Product ${id} updated successfully:`,
-      res.data,
-    );
+    console.log(`🔄 [Update Product] Updating product ${id}...`);
+    let res;
+
+    if (product.imageUri) {
+      const fields: Record<string, string> = {};
+      if (product.name        !== undefined) fields.name        = product.name;
+      if (product.price       !== undefined) fields.price       = String(product.price);
+      if (product.stock       !== undefined) fields.stock       = String(product.stock);
+      if (product.description !== undefined) fields.description = product.description;
+      if (product.category_id      != null)  fields.category_id      = String(product.category_id);
+      if (product.brand_id         != null)  fields.brand_id         = String(product.brand_id);
+      if (product.commerce_area_id != null)  fields.commerce_area_id = String(product.commerce_area_id);
+      const formData = buildImageFormData(product.imageUri, fields);
+      res = await api.patch(`/products/${id}`, formData);
+    } else {
+      res = await api.patch(`/products/${id}`, product);
+    }
+
+    console.log(`✅ [Update Product] Product ${id} updated:`, res.data);
     return res.data;
   } catch (error) {
     console.error(`❌ [Update Product] Failed to update product ${id}:`, error);
@@ -353,46 +418,22 @@ export const deleteBrand = async (id: number) => {
   }
 };
 
-// ─── Cart (server-side) ───
-
-export const getCart = async () => {
-  try {
-    console.log(`🔄 [Cart] Fetching cart for current customer...`);
-    const res = await api.get(`/cart`);
-    console.log(`✅ [Cart] Cart fetched successfully:`, res.data);
-    return res.data?.cartItems || res.data;
-  } catch (error) {
-    console.error(`❌ [Cart] Failed to fetch cart:`, error);
-    throw error;
-  }
-};
-
-export const getCartByCustomerId = async (customerId: number) => {
-  try {
-    console.log(`🔄 [Cart] Fetching cart for customer ${customerId}...`);
-    const res = await api.get(`/cart/${customerId}`);
-    console.log(`✅ [Cart] Cart fetched for customer ${customerId}:`, res.data);
-    return res.data?.cartItems || res.data;
-  } catch (error) {
-    console.error(
-      `❌ [Cart] Failed to fetch cart for customer ${customerId}:`,
-      error,
-    );
-    throw error;
-  }
-};
-
-export const addToCartAPI = async (productId: number, quantity: number) => {
+export const addToCartAPI = async (
+  customerId: number,
+  productId: number,
+  quantity: number
+) => {
   try {
     console.log(
-      `🔄 [Add to Cart] Adding product ${productId} (qty: ${quantity}) to cart...`,
+      `🔄 [Add to Cart] Adding product ${productId} (qty: ${quantity}) to cart...`
     );
     const res = await api.post("/cart", {
+      customer_id: customerId,
       product_id: productId,
       quantity,
     });
     console.log("✅ [Add to Cart] Item added successfully:", res.data);
-    return res.data?.cartItem || res.data;
+    return res.data?.data || res.data?.cartItem || res.data;
   } catch (error) {
     console.error("❌ [Add to Cart] Failed to add item to cart:", error);
     throw error;
@@ -401,20 +442,10 @@ export const addToCartAPI = async (productId: number, quantity: number) => {
 
 export const updateCartItem = async (id: number, quantity: number) => {
   try {
-    // Backend doesn't support PUT for cart items
-    // Solution: Delete and re-add with new quantity (requires product_id)
-    console.log(
-      `🔄 [Update Cart] Updating cart item ${id} with quantity ${quantity}...`,
-    );
-    console.warn(
-      "⚠️  [Update Cart] Backend doesn't support PUT. Use deleteCartItem + addToCartAPI instead",
-    );
-
-    // For now, just delete the item
-    await deleteCartItem(id);
-    // The frontend should then re-add with addToCartAPI(productId, newQuantity)
-
-    return { message: "Cart item deleted. Please re-add with new quantity." };
+    console.log(`🔄 [Update Cart] Setting cart item ${id} quantity to ${quantity}...`);
+    const res = await api.put("/cart", { cart_id: id, quantity });
+    console.log(`✅ [Update Cart] Cart item ${id} updated:`, res.data);
+    return res.data;
   } catch (error) {
     console.error(`❌ [Update Cart] Failed to update cart item ${id}:`, error);
     throw error;
@@ -441,11 +472,12 @@ export const deleteCartItem = async (id: number) => {
 
 // ─── Orders ───
 
-export const getOrders = async () => {
+export const getOrders = async (customerId?: number) => {
   try {
-    console.log(`🔄 [Orders] Fetching all orders...`);
-    const res = await api.get(`/orders`);
-    console.log(`✅ [Orders] Orders fetched successfully:`, res.data);
+    console.log(`🔄 [Orders] Fetching orders...`);
+    const url = customerId ? `/orders?customer_id=${customerId}` : `/orders`;
+    const res = await api.get(url);
+    console.log(`✅ [Orders] Orders fetched:`, res.data);
     return res.data?.orders || res.data;
   } catch (error) {
     console.error(`❌ [Orders] Failed to fetch orders:`, error);
@@ -453,10 +485,10 @@ export const getOrders = async () => {
   }
 };
 
-export const createOrder = async (cartId: number) => {
+export const createOrder = async (cartId: number, phone: string, address: string, totalPrice: number) => {
   try {
-    console.log(`🔄 [Create Order] Creating order from cart ${cartId}...`);
-    const res = await api.post("/orders", { cart_id: cartId });
+    console.log(`🔄 [Create Order] Creating order...`);
+    const res = await api.post("/orders", { cart_id: cartId, phone, address, total_price: totalPrice });
     console.log("✅ [Create Order] Order created successfully:", res.data);
     return res.data;
   } catch (error) {
@@ -494,5 +526,120 @@ export const deleteOrder = async (id: number) => {
   } catch (error) {
     console.error(`❌ [Delete Order] Failed to delete order ${id}:`, error);
     throw error;
+  }
+};
+
+// GET /api/cart?customer_id=...
+export const getCart = async (customerId: number): Promise<CartItem[]> => {
+  const { data } = await api.get(`/cart?customer_id=${customerId}`);
+  return data.cartItems;
+};
+
+// GET /api/cart/:id
+export const getCartById = async (id: number): Promise<CartItem> => {
+  const { data } = await api.get(`/cart/${id}`);
+  return data.cartItem;
+};
+
+// ─── Commerce Areas ───
+
+export const getCommerceAreas = async (): Promise<TypeCommerceArea[]> => {
+  try {
+    console.log("🔄 [CommerceAreas] Fetching all commerce areas...");
+    const res = await api.get("/commerce-areas");
+    console.log("✅ [CommerceAreas] Fetched:", res.data);
+    return res.data?.commerce_areas || res.data;
+  } catch (error) {
+    console.error("❌ [CommerceAreas] Failed to fetch:", error);
+    throw error;
+  }
+};
+
+export const getCommerceAreaByIdAPI = async (id: number): Promise<TypeCommerceArea> => {
+  try {
+    const res = await api.get(`/commerce-areas/${id}`);
+    return res.data?.commerce_area || res.data;
+  } catch (error) {
+    console.error(`❌ [CommerceArea] Failed to fetch area ${id}:`, error);
+    throw error;
+  }
+};
+
+export const createCommerceAreaAPI = async (data: {
+  customer_id: number;
+  area_name: string;
+  description?: string;
+  imageUri?: string;
+}) => {
+  try {
+    console.log("🔄 [CommerceArea] Creating commerce area...");
+    let res;
+
+    if (data.imageUri) {
+      const formData = buildImageFormData(data.imageUri, {
+        customer_id: String(data.customer_id),
+        area_name:   data.area_name,
+        ...(data.description ? { description: data.description } : {}),
+      });
+      res = await api.post("/commerce-areas", formData);
+    } else {
+      res = await api.post("/commerce-areas", {
+        customer_id: data.customer_id,
+        area_name:   data.area_name,
+        description: data.description ?? null,
+      });
+    }
+
+    console.log("✅ [CommerceArea] Created:", res.data);
+    return res.data;
+  } catch (error: any) {
+    const msg = error?.response?.data?.message || error?.message || "Failed to create commerce area";
+    console.error("❌ [CommerceArea] Failed to create:", msg);
+    throw new Error(msg);
+  }
+};
+
+export const updateCommerceAreaAPI = async (
+  id: number,
+  data: { area_name?: string; description?: string; is_active?: boolean; imageUri?: string },
+) => {
+  try {
+    console.log(`🔄 [CommerceArea] Updating area ${id}...`);
+    let res;
+
+    if (data.imageUri) {
+      const fields: Record<string, string> = {};
+      if (data.area_name  !== undefined) fields.area_name   = data.area_name;
+      if (data.description !== undefined) fields.description = data.description;
+      if (data.is_active  !== undefined) fields.is_active   = String(data.is_active);
+      const formData = buildImageFormData(data.imageUri, fields);
+      res = await api.patch(`/commerce-areas/${id}`, formData);
+    } else {
+      res = await api.patch(`/commerce-areas/${id}`, {
+        area_name:   data.area_name,
+        description: data.description,
+        is_active:   data.is_active,
+      });
+    }
+
+    console.log("✅ [CommerceArea] Updated:", res.data);
+    return res.data;
+  } catch (error: any) {
+    const msg = error?.response?.data?.message || error?.message || "Failed to update";
+    console.error("❌ [CommerceArea] Failed to update:", msg);
+    throw new Error(msg);
+  }
+};
+
+export const deleteCommerceAreaAPI = async (id: number) => {
+  try {
+    console.log(`🔄 [CommerceArea] Deleting area ${id}...`);
+    const res = await api.delete(`/commerce-areas/${id}`);
+    console.log("✅ [CommerceArea] Deleted:", res.data);
+    return res.data;
+  } catch (error: any) {
+    const msg = error?.response?.data?.message || error?.message || "Failed to delete";
+    console.error("❌ [CommerceArea] Failed to delete:", msg);
+    throw new Error(msg);
   }
 };

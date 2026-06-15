@@ -1,35 +1,46 @@
 import ProductCard from "@/components/ProductCard";
 import { useLogin } from "@/informations/loginContext";
 import { useApiCreate } from "@/informations/providerData";
-import { Colors, Spacing, Typography } from "@/informations/theme";
+import {
+  useThemeColors,
+  type ThemeColors,
+  Radius,
+  Shadows,
+  Spacing,
+  Typography,
+} from "@/informations/theme";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    FlatList,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
-const CARD_WIDTH = (width - Spacing.lg * 3) / 2;
 
 export default function ProductsScreen() {
   const router = useRouter();
+  const C = useThemeColors();
+  const styles = useMemo(() => mkStyles(C), [C]);
   const { users } = useLogin();
   const { products, loading, isError } = useApiCreate();
   const [search, setSearch] = useState("");
 
   const filtered = Array.isArray(products)
     ? products.filter(
-        (p) => !search || p.name?.toLowerCase().includes(search.toLowerCase()),
+        (p) =>
+          !search ||
+          p.name?.toLowerCase().includes(search.toLowerCase()) ||
+          p.description?.toLowerCase().includes(search.toLowerCase()),
       )
     : [];
 
@@ -44,11 +55,7 @@ export default function ProductsScreen() {
   if (isError) {
     return (
       <SafeAreaView style={[styles.container, styles.center]}>
-        <MaterialCommunityIcons
-          name="wifi-off"
-          size={80}
-          color={Colors.textMuted}
-        />
+        <MaterialCommunityIcons name="wifi-off" size={80} color={C.textMuted} />
         <Text style={styles.errorTitle}>No Connection</Text>
         <Text style={styles.errorSub}>Check your internet and try again</Text>
       </SafeAreaView>
@@ -65,17 +72,17 @@ export default function ProductsScreen() {
 
       {/* ─── Search ─── */}
       <View style={styles.searchBox}>
-        <Ionicons name="search" size={20} color={Colors.textMuted} />
+        <Ionicons name="search" size={20} color={C.textMuted} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search products..."
-          placeholderTextColor={Colors.textMuted}
+          placeholderTextColor={C.textMuted}
           value={search}
           onChangeText={setSearch}
         />
         {search.length > 0 && (
           <Pressable onPress={() => setSearch("")}>
-            <Ionicons name="close-circle" size={20} color={Colors.textMuted} />
+            <Ionicons name="close-circle" size={20} color={C.textMuted} />
           </Pressable>
         )}
       </View>
@@ -83,7 +90,7 @@ export default function ProductsScreen() {
       {/* ─── Grid ─── */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color={C.primary} />
         </View>
       ) : (
         <FlatList
@@ -95,7 +102,7 @@ export default function ProductsScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Ionicons name="bag-outline" size={64} color={Colors.textMuted} />
+              <Ionicons name="bag-outline" size={64} color={C.textMuted} />
               <Text style={styles.emptyText}>No products found</Text>
             </View>
           }
@@ -108,65 +115,25 @@ export default function ProductsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-  },
-  center: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  title: {
-    ...Typography.h2,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.body,
-    color: Colors.textMuted,
-  },
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    borderRadius: 12,
-    backgroundColor: Colors.surfaceAlt,
-    gap: Spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    color: Colors.text,
-  },
-  gridRow: {
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  gridContent: {
-    paddingBottom: Spacing.xl,
-  },
-  errorTitle: {
-    ...Typography.h3,
-    color: Colors.text,
-    marginTop: Spacing.lg,
-  },
-  errorSub: {
-    ...Typography.body,
-    color: Colors.textMuted,
-    marginTop: Spacing.sm,
-  },
-  emptyText: {
-    ...Typography.body,
-    color: Colors.textMuted,
-    marginTop: Spacing.lg,
-  },
-});
+function mkStyles(C: ThemeColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: C.background },
+    center: { justifyContent: "center", alignItems: "center", padding: Spacing.xxl },
+    header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.md },
+    title: { ...Typography.h2, color: C.text, marginBottom: Spacing.xs },
+    subtitle: { ...Typography.body, color: C.textMuted },
+    searchBox: {
+      flexDirection: "row", alignItems: "center",
+      marginHorizontal: Spacing.lg, marginBottom: Spacing.lg,
+      paddingHorizontal: Spacing.md, borderRadius: Radius.lg,
+      backgroundColor: C.surface, gap: Spacing.sm,
+      borderWidth: 1, borderColor: C.borderLight, ...Shadows.sm,
+    },
+    searchInput: { flex: 1, paddingVertical: Spacing.md, color: C.text, ...Typography.body },
+    gridRow: { justifyContent: "space-between", paddingHorizontal: Spacing.lg, marginBottom: Spacing.lg },
+    gridContent: { paddingBottom: Spacing.xl },
+    errorTitle: { ...Typography.h3, color: C.text, marginTop: Spacing.lg },
+    errorSub: { ...Typography.body, color: C.textMuted, marginTop: Spacing.sm },
+    emptyText: { ...Typography.body, color: C.textMuted, marginTop: Spacing.lg },
+  });
+}

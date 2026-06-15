@@ -4,205 +4,194 @@ import {
   addToCartAPI,
   createOrder,
   deleteCartItem,
+  getCart,
+  getCartById,
   getCategories,
   getProducts,
+  updateCartItem,
 } from "./apiPort";
-import { TypeCustomer,CartItem, PostProduct, Product, TypeCategory } from "./types";
+import { useLogin } from "./loginContext";
+import { CartItem, PostProduct, Product, TypeCategory } from "./types";
 
-// ─── store Type ───
+// ─── Store type ───────────────────────────────────────────────────────────────
 export interface ContextType {
-  products: Product[];
-  categories: TypeCategory[];
-  cart: CartItem[];
-  isError: string;
-  loading: boolean;
-  cartLoading: boolean;
-  cartError: string;
-  addToCart: (customer: TypeCustomer, product: Product) => Promise<void>;
-  minusCart: (product: CartItem) => void;
-  removeCart: (id: number) => Promise<void>;
-  clearCart: () => void;
-  placeOrder: () => Promise<void>;
-  postProduct: (product: PostProduct) => Promise<void>;
-  refreshProducts: () => Promise<void>;
+  products:        Product[];
+  categories:      TypeCategory[];
+  cart:            CartItem[];
+  isError:         string;
+  loading:         boolean;
+  cartLoading:     boolean;
+  cartError:       string;
+  selectedCartItem: CartItem | null;
+
+  refreshProducts:  () => Promise<void>;
+  postProduct:      (product: PostProduct) => Promise<void>;
+  addToCart:        (product: Product) => Promise<void>;
+  minusCart:        (item: CartItem) => Promise<void>;
+  removeCart:       (cartItemId: number) => Promise<void>;
+  clearCart:        () => void;
+  placeOrder:       (phone: string, address: string) => Promise<void>;
+  fetchCart:        () => Promise<void>;
+  fetchCartById:    (id: number) => Promise<void>;
 }
 
-// ─── Hook (this is what cart.tsx, post.tsx, category/index.tsx import) ───
+// ─── Store ────────────────────────────────────────────────────────────────────
 export const useApiCreate = create<ContextType>((set, get) => ({
-  customer:[],
-  products: [],
-  categories: [],
-  cart: [],
-  isError: "",
-  loading: false,
-  cartLoading: false,
-  cartError: "",
+  products:         [],
+  categories:       [],
+  cart:             [],
+  isError:          "",
+  loading:          false,
+  cartLoading:      false,
+  cartError:        "",
+  selectedCartItem: null,
 
+  // ─── Products ───
   refreshProducts: async () => {
+    set({ loading: true, isError: "" });
     try {
-      console.log("📡 [Provider] Fetching products and categories...");
-      set({ loading: true, isError: "" });
       const [prods, cats] = await Promise.all([getProducts(), getCategories()]);
       set({ products: prods, categories: cats });
-      console.log("✅ [Provider] Data fetched successfully");
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      console.error("❌ [Provider] Failed to fetch data:", errorMessage);
-      set({ isError: errorMessage });
+      console.log(`✅ [Provider] Loaded ${prods.length} products, ${cats.length} categories`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load data";
+      console.error("❌ [Provider] Failed to fetch data:", msg);
+      set({ isError: msg });
     } finally {
       set({ loading: false });
     }
   },
 
   postProduct: async (product: PostProduct) => {
+    set({ loading: true, isError: "" });
     try {
-      console.log("📡 [Provider] Adding new product...", product);
-      set({ loading: true, isError: "" });
       await addProduct(product);
-      console.log("✅ [Provider] Product added, refreshing products list...");
-      await get().refreshProducts();
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to add product";
-      console.error("❌ [Provider] Failed to add product:", errorMessage);
-      set({ isError: errorMessage });
+      console.log("✅ [Provider] Product created — refreshing list...");
+      // Refresh in background; don't let a refresh failure mask the creation success
+      get().refreshProducts().catch((err) =>
+        console.warn("⚠️ [Provider] Refresh after post failed:", err.message)
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to add product";
+      console.error("❌ [Provider] Failed to add product:", msg);
+      set({ isError: msg });
+      throw err;
     } finally {
       set({ loading: false });
     }
   },
 
-  addToCart: async (customer: TypeCustomer, product: Product) => {
+  // ─── Cart ───
+  addToCart: async (product: Product) => {
+    set({ cartLoading: true, cartError: "" });
     try {
-      set({ cartLoading: true, cartError: "" });
+      const customer = useLogin.getState().users;
+      if (!customer?.id) throw new Error("You must be logged in to add items to cart");
 
-      // API-a goşmak we maglumatlary almak
-      console.log(`📝 [Provider] Adding product ${product.id} to cart API... \nAdding customer ${customer.id}`);
-      const cartItemResponse = await addToCartAPI(product.id, 1);
-      
-      const cartItemId = cartItemResponse?.id;
-      const customerId = cartItemResponse?.customer_id; // <--- customer_id alyndy
-
-      // Local state-e goşmak
-      set((state) => {
-        const existing = state.cart.find((item) => item.id === product.id);
-        const existing2 = state.cart.find((item) => item.customer_id === customer.id);
-        if (existing && existing2) {
-          return {
-            cart: state.cart.map((item) =>
-              item.id === product.id && item.customer_id === customer.id
-                ? { ...item, quantity: item.quantity + 1 }
-                : item,
-            ),
-          };
-        }
-        
-        return {
-          cart: [
-            ...state.cart,
-            {
-              ...customerId && { customer_id: customerId }, // <--- customer_id goşulýar
-              ...product,
-              cart_id: cartItemId,
-              quantity: 1,
-            } as CartItem,
-          ],
-        };
-      });
-
-      console.log(
-        `✅ [Provider] Product ${product.id} added to cart with cart_id ${cartItemId} and customer_id ${customer.id}`
-      );
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to add to cart";
-      console.error("❌ [Provider] Failed to add to cart:", errorMessage);
-      set({ cartError: errorMessage });
-      throw error;
+      const productId = (product as any).product_id ?? product.id;
+      await addToCartAPI(customer.id, productId, 1);
+      await get().fetchCart();
+      console.log(`✅ [Provider] Product ${productId} added to cart`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to add to cart";
+      console.error("❌ [Provider] Add to cart failed:", msg);
+      set({ cartError: msg });
+      throw err;
     } finally {
       set({ cartLoading: false });
     }
   },
 
-  minusCart: (product: CartItem) => {
+  minusCart: async (item: CartItem) => {
+    if (item.quantity <= 1) {
+      return get().removeCart(item.id);
+    }
+    const newQty = item.quantity - 1;
+    // Optimistic update
     set((state) => ({
-      cart: state.cart.map((item) =>
-        item.id === product.id && item.quantity > 1
-          ? { ...item, quantity: item.quantity - 1 }
-          : item,
-      ),
+      cart: state.cart.map((c) => c.id === item.id ? { ...c, quantity: newQty } : c),
     }));
+    try {
+      await updateCartItem(item.id, newQty);
+    } catch {
+      // Rollback on failure
+      set((state) => ({
+        cart: state.cart.map((c) => c.id === item.id ? { ...c, quantity: item.quantity } : c),
+      }));
+    }
   },
 
-  removeCart: async (productId: number) => {
+  removeCart: async (cartItemId: number) => {
+    set({ cartLoading: true, cartError: "" });
     try {
-      set({ cartLoading: true, cartError: "" });
-
-      // Cart_id we customer_id tapmak
-      const cartItem = get().cart.find((item) => item.id === productId);
-      if (!cartItem) {
-        throw new Error("Cart item not found");
-      }
-      
-      const customerId = cartItem.customer_id;
-      const cartItemId = cartItem.id;
-      
-      console.log(
-        `📝 [Provider] Removing cart item ${cartItemId} (customer ${customerId}) (product ${productId})...`,
-      );
       await deleteCartItem(cartItemId);
-
-      // Local state-den aýyrmak
-      set((state) => ({
-        cart: state.cart.filter((item) => item.id !== productId),
-      }));
-
+      set((state) => ({ cart: state.cart.filter((c) => c.id !== cartItemId) }));
       console.log(`✅ [Provider] Cart item ${cartItemId} removed`);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to remove from cart";
-      console.error("❌ [Provider] Failed to remove from cart:", errorMessage);
-      set({ cartError: errorMessage });
-      throw error;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to remove item";
+      console.error("❌ [Provider] Remove cart failed:", msg);
+      set({ cartError: msg });
+      throw err;
     } finally {
       set({ cartLoading: false });
     }
   },
 
-  clearCart: () => {
-    set({ cart: [] });
+  clearCart: () => set({ cart: [], cartError: "" }),
+
+  fetchCart: async () => {
+    set({ cartLoading: true, cartError: "" });
+    try {
+      const customer = useLogin.getState().users;
+      if (!customer?.id) throw new Error("You must be logged in to view cart");
+
+      const cartItems = await getCart(customer.id);
+      set({ cart: cartItems as CartItem[] });
+      console.log(`✅ [Provider] Cart loaded: ${full.length} items`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to fetch cart";
+      console.error("❌ [Provider] Fetch cart failed:", msg);
+      set({ cartError: msg });
+    } finally {
+      set({ cartLoading: false });
+    }
   },
 
-  placeOrder: async () => {
+  fetchCartById: async (id: number) => {
+    set({ cartLoading: true, cartError: "" });
     try {
-      set({ cartLoading: true, cartError: "" });
+      const item = await getCartById(id);
+      set({ selectedCartItem: item });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to fetch cart item";
+      set({ cartError: msg });
+    } finally {
+      set({ cartLoading: false });
+    }
+  },
 
-      const state = get();
-      if (state.cart.length === 0) {
-        throw new Error("Cart is empty");
-      }
+  // ─── Orders ───
+  placeOrder: async (phone: string, address: string) => {
+    set({ cartLoading: true, cartError: "" });
+    try {
+      const { cart } = get();
+      if (cart.length === 0) throw new Error("Cart is empty");
 
-      console.log(
-        `📝 [Provider] Creating order for ${state.cart.length} items...`,
-      );
+      const customer = useLogin.getState().users;
+      if (!customer?.id) throw new Error("You must be logged in to place an order");
 
-      // Eger backend-iňiz order döretmek üçin müşderiniň hakyky cart_id belgisini
-      // talap edýän bolsa, '1' ýerine state.cart[0]?.cart_id ulanyp bilersiňiz:
-      // const orderCartId = state.cart[0]?.cart_id || 1;
-      
-      const result = await createOrder(1);
+      const cartId     = cart[0]?.cart_id ?? cart[0]?.id ?? 0;
+      const totalPrice = cart.reduce((sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1), 0);
 
-      // Üstünlikli buýrukdan soň cart arassalanýar
+      const result = await createOrder(cartId, phone, address, totalPrice);
       set({ cart: [] });
-
-      console.log(`✅ [Provider] Order created successfully:`, result);
+      console.log("✅ [Provider] Order placed:", result);
       return result;
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to place order";
-      console.error("❌ [Provider] Failed to place order:", errorMessage);
-      set({ cartError: errorMessage });
-      throw error;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to place order";
+      console.error("❌ [Provider] Place order failed:", msg);
+      set({ cartError: msg });
+      throw err;
     } finally {
       set({ cartLoading: false });
     }

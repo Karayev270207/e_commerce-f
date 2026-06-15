@@ -1,10 +1,10 @@
 import { Stack } from "expo-router";
 
-const StackComponent = () => {
+export default function CategoryLayout() {
     return (
-        <Stack screenOptions={{ title: "" }}>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="[id]" />
         </Stack>
-    )
+    );
 }
-export default StackComponent;

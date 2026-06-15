@@ -1,57 +1,46 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
-import { deleteCustomer, loginCustomer, registerCustomer } from "./apiPort";
+import { loginCustomer, registerCustomer } from "./apiPort";
 import { TypeCustomer } from "./types";
 
-// ─── Context Types ───
 export interface AuthState {
   isLoading: boolean;
   users: TypeCustomer | null;
   token: string | null;
-  login: (
-    email: string,
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  register: (
-    user: Omit<TypeCustomer, "id">,
-  ) => Promise<{ success: boolean; error?: string }>;
-  logout: () => Promise<void>;
+  login:    (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (user: Omit<TypeCustomer, "id">)  => Promise<{ success: boolean; error?: string }>;
+  logout:   () => Promise<void>;
   initialize: () => Promise<void>;
 }
 
-// ─── Hook ───
-export const useLogin = create<AuthState>((set, get) => ({
+export const useLogin = create<AuthState>((set) => ({
   isLoading: false,
   users: null,
   token: null,
 
+  // ─── Restore session from storage on app start ───
   initialize: async () => {
-    console.log("🔐 [Auth] Restoring session...");
     set({ isLoading: true });
     try {
-      const storedUser = await AsyncStorage.getItem("user");
-      const storedToken = await AsyncStorage.getItem("auth_token");
-
+      const [storedUser, storedToken] = await Promise.all([
+        AsyncStorage.getItem("user"),
+        AsyncStorage.getItem("auth_token"),
+      ]);
       if (storedUser) {
-        const restoredUser = JSON.parse(storedUser);
-        set({ users: restoredUser, token: storedToken });
+        set({ users: JSON.parse(storedUser), token: storedToken });
         console.log("✅ [Auth] Session restored");
-      } else {
-        console.log("ℹ️ [Auth] No stored session found");
       }
-    } catch (error) {
-      console.error("❌ [Auth] Failed to restore session:", error);
+    } catch (err) {
+      console.error("❌ [Auth] Failed to restore session:", err);
     } finally {
       set({ isLoading: false });
     }
   },
 
-  register: async (
-    userData: Omit<TypeCustomer, "id">,
-  ): Promise<{ success: boolean; error?: string }> => {
+  // ─── Register ───
+  register: async (userData) => {
     set({ isLoading: true });
     try {
-      // Validate inputs before sending
       if (!userData.email?.trim() || !userData.password?.trim()) {
         throw new Error("Email and password are required");
       }
@@ -59,89 +48,63 @@ export const useLogin = create<AuthState>((set, get) => ({
         throw new Error("First name and last name are required");
       }
 
-      console.log("🔐 [Auth] Registering new customer...");
-      const resp = await registerCustomer(userData);
+      const resp  = await registerCustomer(userData);
+      const token = resp.accessToken ?? null;
+
       const newUser: TypeCustomer = {
-        email: userData.email.trim(),
+        id:       resp.user?.id ?? resp.id,
+        email:    userData.email.trim(),
         username: userData.username.trim(),
-        surname: userData.surname.trim(),
-        password: userData.password.trim(),
-        id: resp.user?.id ?? resp.id ?? resp.newUser?.id,
+        surname:  userData.surname.trim(),
+        password: "",
       };
+
       await AsyncStorage.setItem("user", JSON.stringify(newUser));
-      set({ users: newUser });
-      console.log("✅ [Auth] Registration successful");
+      if (token) await AsyncStorage.setItem("auth_token", token);
+      set({ users: newUser, token });
+
+      console.log("✅ [Auth] Registered, user id:", newUser.id);
       return { success: true };
-    } catch (error) {
-      let msg = "Registration failed";
-      if (error instanceof Error) {
-        msg = error.message;
-      } else if (typeof error === "object" && error !== null) {
-        msg =
-          (error as any).message ||
-          (error as any).error ||
-          JSON.stringify(error);
-      }
-      console.error("❌ [Auth] Registration error:", msg);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Registration failed";
+      console.error("❌ [Auth] Register error:", msg);
       return { success: false, error: msg };
     } finally {
       set({ isLoading: false });
     }
   },
 
-  login: async (
-    email: string,
-    password: string,
-  ): Promise<{ success: boolean; error?: string }> => {
+  // ─── Login ───
+  login: async (email, password) => {
     set({ isLoading: true });
     try {
-      // Validate inputs
       if (!email?.trim() || !password?.trim()) {
         throw new Error("Email and password are required");
       }
 
-      console.log("🔐 [Auth] Logging in user:", email.trim());
-      const resp = await loginCustomer({
-        email: email.trim(),
-        password: password.trim(),
-      });
+      const resp  = await loginCustomer({ email: email.trim(), password: password.trim() });
+      const token = resp.accessToken ?? null;
 
-      // Extract token from response
-      const token = resp.token || resp.access_token || resp.auth_token;
+      if (!resp.user?.id) {
+        throw new Error("Invalid login response: missing user ID");
+      }
 
       const loggedInUser: TypeCustomer = {
-        email: email.trim(),
-        password: password.trim(),
-        id: resp.user?.id ?? resp.id,
-        username: resp.user?.username,
-        surname: resp.user?.surname,
+        id:       resp.user.id,
+        email:    email.trim(),
+        username: resp.user.username,
+        surname:  resp.user.surname,
+        password: "",
       };
 
-      if (!loggedInUser.email) {
-        throw new Error("Invalid login response: missing user data");
-      }
-
-      // Store user and token
       await AsyncStorage.setItem("user", JSON.stringify(loggedInUser));
-      if (token) {
-        await AsyncStorage.setItem("auth_token", token);
-        set({ users: loggedInUser, token });
-      } else {
-        set({ users: loggedInUser, token: null });
-      }
+      if (token) await AsyncStorage.setItem("auth_token", token);
+      set({ users: loggedInUser, token });
 
-      console.log("✅ [Auth] Login successful");
+      console.log("✅ [Auth] Login successful, user id:", loggedInUser.id);
       return { success: true };
-    } catch (error) {
-      let msg = "Invalid email or password";
-      if (error instanceof Error) {
-        msg = error.message;
-      } else if (typeof error === "object" && error !== null) {
-        msg =
-          (error as any).message ||
-          (error as any).error ||
-          JSON.stringify(error);
-      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Invalid email or password";
       console.error("❌ [Auth] Login error:", msg);
       return { success: false, error: msg };
     } finally {
@@ -149,32 +112,18 @@ export const useLogin = create<AuthState>((set, get) => ({
     }
   },
 
+  // ─── Logout — clears session only, does NOT delete the account ───
   logout: async () => {
-    set({ isLoading: true });
     try {
-      console.log("🔐 [Auth] Logging out user...");
-      const stored = await AsyncStorage.getItem("user");
-      if (stored) {
-        const storedUser = JSON.parse(stored) as TypeCustomer;
-        if (storedUser.id) {
-          try {
-            await deleteCustomer(storedUser.id);
-            console.log("✅ [Auth] Customer deleted successfully");
-          } catch (error) {
-            console.warn(
-              "⚠️ [Auth] Failed to delete customer, but continuing logout:",
-              error,
-            );
-          }
-        }
-      }
-    } catch (error) {
-      console.error("❌ [Auth] Logout error:", error);
+      await Promise.all([
+        AsyncStorage.removeItem("user"),
+        AsyncStorage.removeItem("auth_token"),
+      ]);
+    } catch (err) {
+      console.error("❌ [Auth] Error clearing storage on logout:", err);
     } finally {
-      await AsyncStorage.removeItem("user");
-      await AsyncStorage.removeItem("auth_token");
-      set({ users: null, token: null, isLoading: false });
-      console.log("✅ [Auth] User cleared from storage");
+      set({ users: null, token: null });
+      console.log("✅ [Auth] Logged out");
     }
   },
 }));
