@@ -186,13 +186,14 @@ function buildImageFormData(
   const formData = new FormData();
   formData.append("image", { uri: imageUri, name: filename, type: mimeTypes[ext] ?? "image/jpeg" } as any);
   Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+  // console.log('field:',fields);
+  // console.log(formData);
   return formData;
 }
 
 export const addProduct = async (product: PostProduct) => {
   try {
     let res;
-
     if (product.imageUri) {
       const formData = buildImageFormData(product.imageUri, {
         name:  product.name,
@@ -204,7 +205,10 @@ export const addProduct = async (product: PostProduct) => {
         ...(product.commerce_area_id != null ? { commerce_area_id: String(product.commerce_area_id) } : {}),
       });
       console.log("🔄 [Add Product] Creating product with image...");
-      res = await api.post("/products", formData);
+      // console.log("Obj:",Object.entries(formData).forEach((k,v)=>console.log('Value',v)));
+        console.log(res);
+        res = await api.post("/products", formData,{headers:{'Content-Type': 'multipart/form-data'}});
+        console.log(res);
     } else {
       console.log("🔄 [Add Product] Creating product...");
       res = await api.post("/products", {

@@ -147,7 +147,7 @@ export const useApiCreate = create<ContextType>((set, get) => ({
 
       const cartItems = await getCart(customer.id);
       set({ cart: cartItems as CartItem[] });
-      console.log(`✅ [Provider] Cart loaded: ${full.length} items`);
+      console.log(`✅ [Provider] Cart loaded: ${cartItems.length} items`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to fetch cart";
       console.error("❌ [Provider] Fetch cart failed:", msg);

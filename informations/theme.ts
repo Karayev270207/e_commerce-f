@@ -75,7 +75,7 @@ export const DarkColors = dark;
 export const Colors = Appearance.getColorScheme() === 'dark' ? dark : light;
 
 // Reactive hook — use this in components so styles re-render on system theme change.
-export type ThemeColors = typeof light;
+export type ThemeColors = { [K in keyof typeof light]: string };
 export function useThemeColors(): ThemeColors {
     const scheme = useColorScheme();
     return scheme === 'dark' ? dark : light;
