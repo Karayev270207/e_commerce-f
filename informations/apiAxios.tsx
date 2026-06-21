@@ -16,9 +16,12 @@ const api = axios.create({
 // ─── Request interceptor ──────────────────────────────────────────────────────
 api.interceptors.request.use(
   async (config) => {
-    // Remove Content-Type for FormData so the native XHR sets the multipart boundary.
+    // Remove Content-Type for FormData so RN's native XHR can set multipart/form-data
+    // with the correct boundary automatically. Using .delete() (AxiosHeaders API) is
+    // more reliable than the plain JS delete operator for case-insensitive removal.
     if (config.data && typeof (config.data as any).append === "function") {
-      delete (config.headers as any)["Content-Type"];
+      console.log("📎 [API] FormData detected — stripping Content-Type so RN XHR sets boundary");
+      (config.headers as any).delete("Content-Type");
     }
 
     try {

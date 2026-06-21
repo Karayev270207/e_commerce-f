@@ -27,6 +27,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -173,6 +174,7 @@ function ProductForm({
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showBrandPicker, setShowBrandPicker] = useState(false);
+  const [linkToArea, setLinkToArea] = useState(false);
 
   useEffect(() => {
     const fetchBrands = async () => {
@@ -216,13 +218,12 @@ function ProductForm({
       await postProduct({
         imageUri: imageUri || undefined,
         name: name.trim(),
-        category: selectedCategory?.category_name ?? "",
         price: Number(price),
         description: description.trim(),
         stock: Number(stock),
         category_id: selectedCategory?.id ?? undefined,
         brand_id: selectedBrand?.id ?? undefined,
-        commerce_area_id: commerceAreaId ?? undefined,
+        commerce_area_id: linkToArea && commerceAreaId ? commerceAreaId : undefined,
       });
       Alert.alert("Success", "Product has been published!", [
         { text: "Add Another", onPress: resetForm },
@@ -236,6 +237,7 @@ function ProductForm({
   const resetForm = () => {
     setImageUri(""); setName(""); setPrice(""); setStock("1");
     setDescription(""); setSelectedCategory(null); setSelectedBrand(null);
+    setLinkToArea(false);
   };
 
   const categoryItems = (categories ?? []).map((c) => ({ id: c.id, label: c.category_name, category_name: c.category_name }));
@@ -276,13 +278,29 @@ function ProductForm({
           {/* Form card */}
           <View style={styles.card}>
             {myArea && (
-              <View style={styles.areaRow}>
-                <Ionicons name="storefront-outline" size={16} color={C.primary} />
-                <Text style={styles.areaText}>
-                  Will be listed in:{" "}
-                  <Text style={{ color: C.primary, fontWeight: "600" }}>{myArea.area_name}</Text>
-                </Text>
-              </View>
+              <Pressable style={styles.areaToggleRow} onPress={() => setLinkToArea((v) => !v)}>
+                <View style={styles.areaToggleLeft}>
+                  <Ionicons
+                    name="storefront-outline"
+                    size={18}
+                    color={linkToArea ? C.primary : C.textMuted}
+                  />
+                  <View style={{ marginLeft: Spacing.sm }}>
+                    <Text style={[styles.areaToggleLabel, linkToArea && { color: C.primary }]}>
+                      Add to {myArea.area_name}
+                    </Text>
+                    <Text style={styles.areaToggleCaption}>
+                      {linkToArea ? "Listed in your commerce area" : "Regular product (not in store)"}
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={linkToArea}
+                  onValueChange={setLinkToArea}
+                  trackColor={{ false: C.borderLight, true: C.primarySurface }}
+                  thumbColor={linkToArea ? C.primary : C.textMuted}
+                />
+              </Pressable>
             )}
 
             <Text style={styles.label}>Product Name *</Text>
@@ -451,8 +469,15 @@ function mkFormStyles(C: ThemeColors) {
     imageEmpty: { flex: 1, alignItems: "center", justifyContent: "center" },
     imageEmptyText: { ...Typography.caption, color: C.textMuted, marginTop: Spacing.sm },
     card: { backgroundColor: C.surface, borderRadius: Radius.xl, padding: Spacing.xxl, ...Shadows.md },
-    areaRow: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, backgroundColor: C.primarySurface, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, marginBottom: Spacing.lg },
-    areaText: { ...Typography.caption, color: C.textSecondary },
+    areaToggleRow: {
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      borderWidth: 1, borderColor: C.borderLight, borderRadius: Radius.md,
+      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, marginBottom: Spacing.lg,
+      backgroundColor: C.surfaceAlt,
+    },
+    areaToggleLeft: { flexDirection: "row", alignItems: "center", flex: 1, marginRight: Spacing.md },
+    areaToggleLabel: { ...Typography.captionBold, color: C.text },
+    areaToggleCaption: { ...Typography.small, color: C.textMuted, marginTop: 2 },
     label: { ...Typography.captionBold, color: C.text, marginBottom: Spacing.xs, marginTop: Spacing.md },
     input: { backgroundColor: C.surfaceAlt, borderRadius: Radius.md, paddingHorizontal: Spacing.md, height: 48, ...Typography.body, color: C.text, borderWidth: 1, borderColor: C.borderLight },
     inputMulti: { height: 88, textAlignVertical: "top", paddingTop: Spacing.sm },

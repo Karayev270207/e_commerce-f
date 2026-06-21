@@ -10,7 +10,7 @@ import {
 } from "./types";
 
 // ─── Customers ───
-
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 export const loginCustomer = async (credentials: {
   email: string;
   password: string;
@@ -193,7 +193,7 @@ function buildImageFormData(
 
 export const addProduct = async (product: PostProduct) => {
   try {
-    let res;
+    let res: {data:any} = {data: null};
     if (product.imageUri) {
       const formData = buildImageFormData(product.imageUri, {
         name:  product.name,
@@ -204,11 +204,25 @@ export const addProduct = async (product: PostProduct) => {
         ...(product.brand_id         != null ? { brand_id:         String(product.brand_id) }         : {}),
         ...(product.commerce_area_id != null ? { commerce_area_id: String(product.commerce_area_id) } : {}),
       });
-      console.log("🔄 [Add Product] Creating product with image...");
-      // console.log("Obj:",Object.entries(formData).forEach((k,v)=>console.log('Value',v)));
-        console.log(res);
-        res = await api.post("/products", formData,{headers:{'Content-Type': 'multipart/form-data'}});
-        console.log(res);
+      console.log("🔄 [Add Product] Creating product with image...", {
+        name: product.name,
+        price: product.price,
+        stock: product.stock,
+        category_id: product.category_id,
+        brand_id: product.brand_id,
+        commerce_area_id: product.commerce_area_id,
+      });
+      // No explicit Content-Type: the request interceptor strips it so RN's native XHR
+      // can set multipart/form-data with the correct boundary automatically.
+      const response = await fetch(`${BASE_URL}/api/products`,{
+        method:"POST",
+        body:formData,
+      });
+      const data = await response.json();
+      if(!response.ok) {
+        throw new Error(`Server errory: ${response.status}. ${JSON.stringify(data)}`);
+      }
+      res.data = data;
     } else {
       console.log("🔄 [Add Product] Creating product...");
       res = await api.post("/products", {
@@ -237,8 +251,8 @@ export const updateProduct = async (
 ) => {
   try {
     console.log(`🔄 [Update Product] Updating product ${id}...`);
-    let res;
-
+    let body;
+    const headers: Record<string, string> = {};
     if (product.imageUri) {
       const fields: Record<string, string> = {};
       if (product.name        !== undefined) fields.name        = product.name;
@@ -248,14 +262,22 @@ export const updateProduct = async (
       if (product.category_id      != null)  fields.category_id      = String(product.category_id);
       if (product.brand_id         != null)  fields.brand_id         = String(product.brand_id);
       if (product.commerce_area_id != null)  fields.commerce_area_id = String(product.commerce_area_id);
-      const formData = buildImageFormData(product.imageUri, fields);
-      res = await api.patch(`/products/${id}`, formData);
+      body = buildImageFormData(product.imageUri, fields);
     } else {
-      res = await api.patch(`/products/${id}`, product);
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(product);
+    }
+    const response = await fetch(`${BASE_URL}/api/products/${id}`, {
+      method: "PATCH",
+      headers,
+      body,
+    });
+    if(!response.ok){
+      throw new Error(`HTTP ${response.status}`);
     }
 
-    console.log(`✅ [Update Product] Product ${id} updated:`, res.data);
-    return res.data;
+    const data = await response.json();
+    console.log(`Product [${data}] updated successfully!`);
   } catch (error) {
     console.error(`❌ [Update Product] Failed to update product ${id}:`, error);
     throw error;
@@ -383,9 +405,14 @@ export const getBrandById = async (id: number): Promise<TypeBrand> => {
 export const addBrand = async (brand: Omit<TypeBrand, "id">) => {
   try {
     console.log("🔄 [Add Brand] Creating new brand...", brand);
-    const res = await api.post("/brands", brand);
-    console.log("✅ [Add Brand] Brand created successfully:", res.data);
-    return res.data;
+    const res = await fetch(`${BASE_URL}/api/brands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(brand),
+    });
+    const data = await res.json();
+    console.log("✅ [Add Brand] Brand created successfully:", data);
+    return data;
   } catch (error) {
     console.error("❌ [Add Brand] Failed to create brand:", error);
     throw error;
@@ -395,12 +422,14 @@ export const addBrand = async (brand: Omit<TypeBrand, "id">) => {
 export const updateBrand = async (id: number, brand: Partial<TypeBrand>) => {
   try {
     console.log(`🔄 [Update Brand] Updating brand ${id}...`, brand);
-    const res = await api.put(`/brands/${id}`, brand);
-    console.log(
-      `✅ [Update Brand] Brand ${id} updated successfully:`,
-      res.data,
-    );
-    return res.data;
+    const res = await fetch(`${BASE_URL}/api/brands/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(brand),
+    });
+    const data = await res.json();
+    console.log(`✅ [Update Brand] Brand ${id} updated successfully:`, data);
+    return data;
   } catch (error) {
     console.error(`❌ [Update Brand] Failed to update brand ${id}:`, error);
     throw error;
@@ -410,12 +439,12 @@ export const updateBrand = async (id: number, brand: Partial<TypeBrand>) => {
 export const deleteBrand = async (id: number) => {
   try {
     console.log(`🔄 [Delete Brand] Deleting brand ${id}...`);
-    const res = await api.delete(`/brands/${id}`);
-    console.log(
-      `✅ [Delete Brand] Brand ${id} deleted successfully:`,
-      res.data,
-    );
-    return res.data;
+    const res = await fetch(`${BASE_URL}/api/brands/${id}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    console.log(`✅ [Delete Brand] Brand ${id} deleted successfully:`, data);
+    return data;
   } catch (error) {
     console.error(`❌ [Delete Brand] Failed to delete brand ${id}:`, error);
     throw error;
@@ -577,7 +606,7 @@ export const createCommerceAreaAPI = async (data: {
 }) => {
   try {
     console.log("🔄 [CommerceArea] Creating commerce area...");
-    let res;
+    let res: any;
 
     if (data.imageUri) {
       const formData = buildImageFormData(data.imageUri, {
@@ -585,17 +614,25 @@ export const createCommerceAreaAPI = async (data: {
         area_name:   data.area_name,
         ...(data.description ? { description: data.description } : {}),
       });
-      res = await api.post("/commerce-areas", formData);
+      res = await fetch(`${BASE_URL}/api/commerce-areas`, {
+        method: "POST",
+        body: formData,
+      });
     } else {
-      res = await api.post("/commerce-areas", {
-        customer_id: data.customer_id,
-        area_name:   data.area_name,
-        description: data.description ?? null,
+      res = await fetch(`${BASE_URL}/api/commerce-areas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_id: data.customer_id,
+          area_name:   data.area_name,
+          description: data.description ?? null,
+        }),
       });
     }
-
-    console.log("✅ [CommerceArea] Created:", res.data);
-    return res.data;
+    const result = await res.json();
+    if (!res.ok) throw new Error(result?.message ?? `Server error ${res.status}`);
+    console.log("✅ [CommerceArea] Created:", result);
+    return result;
   } catch (error: any) {
     const msg = error?.response?.data?.message || error?.message || "Failed to create commerce area";
     console.error("❌ [CommerceArea] Failed to create:", msg);
@@ -609,25 +646,34 @@ export const updateCommerceAreaAPI = async (
 ) => {
   try {
     console.log(`🔄 [CommerceArea] Updating area ${id}...`);
-    let res;
+    let res: any;
 
     if (data.imageUri) {
       const fields: Record<string, string> = {};
-      if (data.area_name  !== undefined) fields.area_name   = data.area_name;
+      if (data.area_name   !== undefined) fields.area_name   = data.area_name;
       if (data.description !== undefined) fields.description = data.description;
-      if (data.is_active  !== undefined) fields.is_active   = String(data.is_active);
+      if (data.is_active   !== undefined) fields.is_active   = String(data.is_active);
       const formData = buildImageFormData(data.imageUri, fields);
-      res = await api.patch(`/commerce-areas/${id}`, formData);
+      res = await fetch(`${BASE_URL}/api/commerce-areas/${id}`, {
+        method: "PATCH",
+        body: formData,
+      });
     } else {
-      res = await api.patch(`/commerce-areas/${id}`, {
-        area_name:   data.area_name,
-        description: data.description,
-        is_active:   data.is_active,
+      res = await fetch(`${BASE_URL}/api/commerce-areas/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area_name:   data.area_name,
+          description: data.description,
+          is_active:   data.is_active,
+        }),
       });
     }
 
-    console.log("✅ [CommerceArea] Updated:", res.data);
-    return res.data;
+    const result = await res.json();
+    if (!res.ok) throw new Error(result?.message ?? `Server error ${res.status}`);
+    console.log("✅ [CommerceArea] Updated:", result);
+    return result;
   } catch (error: any) {
     const msg = error?.response?.data?.message || error?.message || "Failed to update";
     console.error("❌ [CommerceArea] Failed to update:", msg);

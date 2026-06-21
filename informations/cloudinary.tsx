@@ -1,67 +1,34 @@
-// Local image upload utility — images are served from the backend's /uploads folder.
-// No external CDN dependency.
-
-import React from 'react';
-import { Image, ImageStyle, StyleProp, View, ViewStyle } from 'react-native';
-
-// Returns true if the URL is a local backend upload
-export function isLocalUpload(url: string | null | undefined): boolean {
-    if (!url) return false;
-    return url.includes('/uploads/');
-}
-
-// Swap the host part of a local upload URL to the current API base URL.
-// Useful when the server IP changes between environments.
+/**
+ * Image URL resolver for the local backend uploads.
+ *
+ * The backend serves images at: http://<SERVER_IP>:<PORT>/uploads/<filename>
+ * Those are returned as fully-qualified absolute URLs in the `image` / `image_url`
+ * fields, so this function just validates and passes them through.
+ *
+ * The `baseUrl` parameter is accepted for backward compatibility with existing
+ * callers but is only used as a fallback for relative paths.
+ */
 export function resolveImageUrl(
-    url: string | null | undefined,
-    apiBase?: string
+  imageUrl: string | null | undefined,
+  baseUrl?: string,
 ): string | null {
-    if (!url) return null;
-    if (!apiBase || !isLocalUpload(url)) return url;
+  if (!imageUrl) {
+    console.log("🖼️ [Image] No image URL provided");
+    return null;
+  }
 
-    try {
-        const parsed  = new URL(url);
-        const base    = new URL(apiBase);
-        parsed.host   = base.host;
-        parsed.protocol = base.protocol;
-        return parsed.toString();
-    } catch {
-        return url;
-    }
+  // Absolute URL — return as-is (normal case for backend local uploads)
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+    return imageUrl;
+  }
+
+  // Relative path starting with "/" — prepend the API base URL
+  if (baseUrl && imageUrl.startsWith("/")) {
+    const resolved = `${baseUrl.replace(/\/$/, "")}${imageUrl}`;
+    console.log("🖼️ [Image] Resolved relative path →", resolved);
+    return resolved;
+  }
+
+  console.warn("⚠️ [Image] Unresolvable image URL:", imageUrl);
+  return null;
 }
-
-// ─── LocalImage component ─────────────────────────────────────────────────────
-
-interface LocalImageProps {
-    uri: string | null | undefined;
-    style?: StyleProp<ImageStyle>;
-    containerStyle?: StyleProp<ViewStyle>;
-    resizeMode?: 'cover' | 'contain' | 'stretch' | 'center';
-    placeholder?: React.ReactNode;
-    apiBase?: string;
-}
-
-export function LocalImage({
-    uri,
-    style,
-    containerStyle,
-    resizeMode = 'cover',
-    placeholder,
-    apiBase,
-}: LocalImageProps) {
-    const resolved = resolveImageUrl(uri, apiBase);
-
-    if (!resolved) {
-        return placeholder ? <View style={containerStyle}>{placeholder}</View> : null;
-    }
-
-    return (
-        <Image
-            source={{ uri: resolved }}
-            style={style}
-            resizeMode={resizeMode}
-        />
-    );
-}
-
-export default LocalImage;

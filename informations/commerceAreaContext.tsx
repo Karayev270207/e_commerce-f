@@ -24,6 +24,12 @@ export interface CommerceAreaStore {
     description?: string;
     imageUri?: string;
   }) => Promise<void>;
+  replaceArea: (data: {
+    customer_id: number;
+    area_name: string;
+    description?: string;
+    imageUri?: string;
+  }) => Promise<void>;
   updateArea: (
     id: number,
     data: { area_name?: string; description?: string; is_active?: boolean; imageUri?: string },
@@ -105,6 +111,15 @@ export const useCommerceArea = create<CommerceAreaStore>((set, get) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  // ─── Replace existing area (delete current + create new) ───
+  replaceArea: async (data) => {
+    const current = get().myArea;
+    if (current) {
+      await get().deleteArea(current.id);
+    }
+    await get().createArea(data);
   },
 
   // ─── Update existing area ───

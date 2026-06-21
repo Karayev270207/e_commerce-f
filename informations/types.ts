@@ -27,7 +27,6 @@ export interface Product {
 export interface PostProduct {
     imageUri?: string;  // local file URI for upload
     name: string;
-    category: string;
     price: number;
     description?: string;
     stock?: number;

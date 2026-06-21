@@ -51,8 +51,15 @@ export const useApiCreate = create<ContextType>((set, get) => ({
     set({ loading: true, isError: "" });
     try {
       const [prods, cats] = await Promise.all([getProducts(), getCategories()]);
-      set({ products: prods, categories: cats });
-      console.log(`✅ [Provider] Loaded ${prods.length} products, ${cats.length} categories`);
+      // Enrich each product with its human-readable category name so
+      // ProductCard and the detail screen can display it without a join.
+      const catMap = new Map(cats.map((c) => [c.id, c.category_name]));
+      const enriched = prods.map((p) => ({
+        ...p,
+        category: catMap.get(p.category_id ?? -1) ?? p.category ?? "",
+      }));
+      set({ products: enriched, categories: cats });
+      console.log(`✅ [Provider] Loaded ${enriched.length} products, ${cats.length} categories`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load data";
       console.error("❌ [Provider] Failed to fetch data:", msg);

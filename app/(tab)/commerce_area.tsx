@@ -113,6 +113,7 @@ function CreateAreaScreen({
 }) {
   const C = useThemeColors();
   const s = useMemo(() => mkStyles(C), [C]);
+  const { replaceArea } = useCommerceArea();
   const [areaName, setAreaName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUri, setImageUri] = useState("");
@@ -126,10 +127,33 @@ function CreateAreaScreen({
 
   const handleCreate = async () => {
     if (!areaName.trim()) { Alert.alert("Required", "Please enter a name for your commerce area."); return; }
+    const newData = { customer_id: customerId, area_name: areaName.trim(), description: description.trim() || undefined, imageUri: imageUri || undefined };
     try {
-      await onCreate({ customer_id: customerId, area_name: areaName.trim(), description: description.trim() || undefined, imageUri: imageUri || undefined });
+      await onCreate(newData);
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not create commerce area.");
+      const msg: string = err?.message ?? "";
+      if (msg.toLowerCase().includes("already has a commerce area")) {
+        Alert.alert(
+          "Commerce Area Exists",
+          "You already have a commerce area. Would you like to replace it? Your existing store will be deleted and all linked products will become regular products.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Replace",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  await replaceArea(newData);
+                } catch (e: any) {
+                  Alert.alert("Error", e?.message ?? "Failed to replace commerce area.");
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert("Error", msg || "Could not create commerce area.");
+      }
     }
   };
 
@@ -408,7 +432,24 @@ function AreaDashboard({
             Deleting your commerce area will unlink all products. This cannot be undone.
           </Text>
           <Pressable
-            style={({ pressed }) => [s.deleteBtn, pressed && { opacity: 0.8 }, loading && { opacity: 0.5 }]}
+            style={({ pressed }) => [s.replaceBtn, pressed && { opacity: 0.8 }, loading && { opacity: 0.5 }]}
+            onPress={() =>
+              Alert.alert(
+                "Replace Commerce Area",
+                `This will delete "${area.area_name}" and let you create a new store. All linked products will become regular products. Are you sure?`,
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Replace", style: "destructive", onPress: async () => { try { await onDelete(); } catch (e: any) { Alert.alert("Error", e?.message ?? "Failed."); } } },
+                ],
+              )
+            }
+            disabled={loading}
+          >
+            <Ionicons name="refresh-outline" size={18} color={C.error} />
+            <Text style={s.deleteBtnText}>Replace Commerce Area</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [s.deleteBtn, { marginTop: Spacing.sm }, pressed && { opacity: 0.8 }, loading && { opacity: 0.5 }]}
             onPress={handleDelete}
             disabled={loading}
           >
@@ -511,6 +552,7 @@ function mkStyles(C: ThemeColors) {
     dangerCard: { backgroundColor: C.errorLight, borderRadius: Radius.lg, padding: Spacing.lg, borderWidth: 1, borderColor: C.error, marginBottom: Spacing.xxxl, opacity: 0.9 },
     dangerTitle: { ...Typography.bodyBold, color: C.error },
     dangerSub: { ...Typography.caption, color: C.error, marginTop: Spacing.xs, marginBottom: Spacing.lg, opacity: 0.8 },
+    replaceBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.xs, paddingVertical: Spacing.md, borderRadius: Radius.md, borderWidth: 1.5, borderColor: C.error, backgroundColor: C.surface },
     deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.xs, paddingVertical: Spacing.md, borderRadius: Radius.md, borderWidth: 1.5, borderColor: C.error },
     deleteBtnText: { ...Typography.bodyBold, color: C.error },
   });
